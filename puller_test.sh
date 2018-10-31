@@ -17,6 +17,7 @@
 # Unit tests for puller.par
 
 # Trick to chase the symlink before the docker build.
+rm -f puller2.par
 cp puller.par puller2.par
 
 # Test pulling an image by just invoking the puller

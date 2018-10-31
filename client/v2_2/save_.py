@@ -22,6 +22,7 @@ import io
 import json
 import os
 import tarfile
+from shutil import copy
 
 import concurrent.futures
 from containerregistry.client import docker_name
@@ -141,7 +142,7 @@ def tarball(name, image,
 
 
 def fast(image, directory,
-         threads = 1):
+         threads = 1, cache_directory = None):
   """Produce a FromDisk compatible file layout under the provided directory.
 
   After calling this, the following filesystem will exist:
@@ -172,6 +173,11 @@ def fast(image, directory,
     with io.open(name, u'wb') as f:
       f.write(accessor(arg))
 
+  def write_file_and_store(name, accessor,
+                           arg, cached_name):
+    write_file(name, accessor, arg)
+    copy(name, cached_name)
+
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
     future_to_params = {}
     config_file = os.path.join(directory, 'config.json')
@@ -184,18 +190,35 @@ def fast(image, directory,
     layers = []
     for blob in reversed(image.fs_layers()):
       # Create a local copy
+      layer_name = os.path.join(directory, '%03d.tar.gz' % idx)
       digest_name = os.path.join(directory, '%03d.sha256' % idx)
+      digest = blob[7:].encode('utf8')
+
       f = executor.submit(
-          write_file,
-          digest_name,
-          # Strip the sha256: prefix
-          lambda blob: blob[7:].encode('utf8'),
-          blob)
+        write_file,
+        digest_name,
+        lambda unused: digest,
+        'unused')
+
       future_to_params[f] = digest_name
 
-      layer_name = os.path.join(directory, '%03d.tar.gz' % idx)
-      f = executor.submit(write_file, layer_name, image.blob, blob)
-      future_to_params[f] = layer_name
+      if cache_directory:
+        # Search for a local cached copy
+        layer_cache_directory = os.path.join(cache_directory, digest)
+        cached_layer = os.path.join(layer_cache_directory, "000.tar.gz")
+        if os.path.exists(cached_layer):
+          # TODO - validate sha256 of the cached copy
+          f = executor.submit(
+            copy,
+            cached_layer,
+            layer_name)
+          future_to_params[f] = layer_name
+        else:
+          f = executor.submit(write_file_and_store, layer_name, image.blob, blob, cached_layer)
+          future_to_params[f] = layer_name
+      else:
+        f = executor.submit(write_file, layer_name, image.blob, blob)
+        future_to_params[f] = layer_name
 
       layers.append((digest_name, layer_name))
       idx += 1
