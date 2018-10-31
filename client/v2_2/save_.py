@@ -174,9 +174,9 @@ def fast(image, directory,
       f.write(accessor(arg))
 
   def write_file_and_store(name, accessor,
-                           arg, cached_name):
+                           arg, cached_layer):
     write_file(name, accessor, arg)
-    copy(name, cached_name)
+    copy(name, cached_layer)
 
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
     future_to_params = {}
@@ -204,8 +204,7 @@ def fast(image, directory,
 
       if cache_directory:
         # Search for a local cached copy
-        layer_cache_directory = os.path.join(cache_directory, digest)
-        cached_layer = os.path.join(layer_cache_directory, "000.tar.gz")
+        cached_layer = os.path.join(cache_directory, digest)
         if os.path.exists(cached_layer):
           # TODO - validate sha256 of the cached copy
           f = executor.submit(

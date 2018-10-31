@@ -16,9 +16,13 @@
 
 # Unit tests for puller.par
 
-# Trick to chase the symlink before the docker build.
+# remove puller2.par to avoid Permission denied errors on Mac OS
 rm -f puller2.par
+
+# Trick to chase the symlink before the docker build.
 cp puller.par puller2.par
+
+timing=-1
 
 # Test pulling an image by just invoking the puller
 function test_puller() {
@@ -61,6 +65,56 @@ function test_image() {
   test_base "${image}" python2.7 gcr.io/cloud-builders/bazel
 }
 
+function test_puller_with_cache() {
+  local image=$1
+
+  # Test it in our current environment.
+  puller.par --name="${image}" --directory=/tmp/ --cache=/tmp/containerregistery_docker_cache_dir
+}
+
+function test_image_with_cache() {
+  local image=$1
+
+  test_image_with_timing "${image}"
+  local first_pull_timing=$timing
+  echo "TIMING: ${image} - First pull took ${first_pull_timing} seconds"
+
+  test_image_with_timing "${image}"
+  local second_pull_timing=$timing
+  echo "TIMING: ${image} - Second pull took ${second_pull_timing} seconds"
+
+  # TODO - is there a better way to test that the cache was used beside asserting the first_pull > second_pull???
+}
+
+function test_image_with_timing() {
+  local image=$1
+
+  echo "TESTING: ${image}"
+
+  local pull_start=$(date +%s)
+  test_puller_with_cache "${image}"
+
+  local pull_end=$(date +%s)
+  timing=$(($pull_end-$pull_start))
+
+  test_base "${image}" python2.7 python:2.7
+  test_base "${image}" python2.7 gcr.io/cloud-builders/bazel
+}
+
+function clear_cache_directory() {
+  rm -fr /tmp/containerregistery_docker_cache_dir
+}
+
+function create_cache_directory() {
+  mkdir -p /tmp/containerregistery_docker_cache_dir
+}
+
+clear_cache_directory
+create_cache_directory
+
+# Test pulling with cache
+test_image_with_cache gcr.io/google-appengine/python:latest
+
 # Test pulling a trivial image.
 test_image gcr.io/google-containers/pause:2.0
 
@@ -90,3 +144,5 @@ test_image gcr.io/google-containers/pause@sha256:9ce5316f9752b8347484ab0f6778573
 test_image index.docker.io/library/busybox@sha256:1669a6aa7350e1cdd28f972ddad5aceba2912f589f19a090ac75b7083da748db
 
 # TODO(user): Add an authenticated pull test.
+
+clear_cache_directory
