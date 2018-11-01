@@ -22,7 +22,6 @@ import io
 import json
 import os
 import tarfile
-from shutil import copy
 
 import concurrent.futures
 from containerregistry.client import docker_name
@@ -175,8 +174,13 @@ def fast(image, directory,
 
   def write_file_and_store(name, accessor,
                            arg, cached_layer):
-    write_file(name, accessor, arg)
-    copy(name, cached_layer)
+    write_file(cached_layer, accessor, arg)
+    link(cached_layer, name)
+
+  def link(source, link):
+    if os.path.exists(link):
+      os.unlink(link)
+    os.link(source, link)
 
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
     future_to_params = {}
@@ -208,7 +212,7 @@ def fast(image, directory,
         if os.path.exists(cached_layer):
           # TODO - validate sha256 of the cached copy
           f = executor.submit(
-            copy,
+            link,
             cached_layer,
             layer_name)
           future_to_params[f] = layer_name
