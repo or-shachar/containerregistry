@@ -32,6 +32,7 @@ from containerregistry.client.v2_2 import docker_digest
 from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 from containerregistry.client.v2_2 import v2_compat
+from containerregistry.client.v2_2 import docker_digest
 
 import six
 
@@ -182,6 +183,11 @@ def fast(image, directory,
       os.unlink(link)
     os.link(source, link)
 
+  def valid(cached_layer, digest):
+    with io.open(cached_layer, u'rb') as f:
+      current_digest = docker_digest.SHA256(f.read(), '')
+    return current_digest == digest
+
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
     future_to_params = {}
     config_file = os.path.join(directory, 'config.json')
@@ -209,8 +215,7 @@ def fast(image, directory,
       if cache_directory:
         # Search for a local cached copy
         cached_layer = os.path.join(cache_directory, digest)
-        if os.path.exists(cached_layer):
-          # TODO - validate sha256 of the cached copy
+        if os.path.exists(cached_layer) and valid(cached_layer, digest):
           f = executor.submit(
             link,
             cached_layer,
