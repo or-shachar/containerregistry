@@ -32,7 +32,6 @@ from containerregistry.client.v2_2 import docker_digest
 from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 from containerregistry.client.v2_2 import v2_compat
-from containerregistry.client.v2_2 import docker_digest
 
 import six
 
@@ -179,6 +178,9 @@ def fast(image, directory,
     link(cached_layer, name)
 
   def link(source, link):
+    # unlink first to remove "old" layers if needed, e.g., image A latest has layers 1, 2 and 3
+    # after a while it has layers 1, 2 and 3'. Since in both cases the layers are named 001, 002 and 003
+    # Unlinking promises the correct layers are linked in the image directory
     if os.path.exists(link):
       os.unlink(link)
     os.link(source, link)
