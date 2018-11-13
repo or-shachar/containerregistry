@@ -32,6 +32,8 @@ from containerregistry.client.v2_2 import docker_digest
 from containerregistry.client.v2_2 import docker_http
 from containerregistry.client.v2_2 import docker_image as v2_2_image
 from containerregistry.client.v2_2 import v2_compat
+from filecmp import cmp as files_are_equal
+from shutil import copy2 as copy_file
 
 import six
 
@@ -168,28 +170,40 @@ def fast(image, directory,
   """
 
   def write_file(name, accessor,
-                 arg):
+                 arg, sync_cache):
     with io.open(name, u'wb') as f:
       f.write(accessor(arg))
 
   def write_file_and_store(name, accessor,
                            arg, cached_layer):
     write_file(cached_layer, accessor, arg)
-    link(cached_layer, name)
+    sync_cache(cached_layer, name)
 
-  def link(source, link):
+
+  def copy_from_cache(source, dest):
+    # if copy of the file exists and equals to the one in cache - do nothing
+    if os.path.exists(dest):
+      if (!files_are_equal(source, dest)):
+          os.remove(dest)
+          copy_file(source, dest)
+    else:
+        copy_file(source, dest)
+
+
+  def symlink_to_cache(source, dest):
     # unlink first to remove "old" layers if needed, e.g., image A latest has layers 1, 2 and 3
     # after a while it has layers 1, 2 and 3'. Since in both cases the layers are named 001, 002 and 003
     # Unlinking promises the correct layers are linked in the image directory
-    if os.path.exists(link):
-      os.unlink(link)
-    os.link(source, link)
+    if os.path.exists(dest):
+      os.remove(dest)
+    os.symlink(source, dest)
+
 
   def valid(cached_layer, digest):
     with io.open(cached_layer, u'rb') as f:
       current_digest = docker_digest.SHA256(f.read(), '')
     return current_digest == digest
-
+  sync_cache = symlink_to_cache
   with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
     future_to_params = {}
     config_file = os.path.join(directory, 'config.json')
@@ -219,12 +233,12 @@ def fast(image, directory,
         cached_layer = os.path.join(cache_directory, digest)
         if os.path.exists(cached_layer) and valid(cached_layer, digest):
           f = executor.submit(
-            link,
+            sync_cache,
             cached_layer,
             layer_name)
           future_to_params[f] = layer_name
         else:
-          f = executor.submit(write_file_and_store, layer_name, image.blob, blob, cached_layer)
+          f = executor.submit(write_file_and_store, layer_name, image.blob, blob, cached_layer, sync_cache)
           future_to_params[f] = layer_name
       else:
         f = executor.submit(write_file, layer_name, image.blob, blob)
