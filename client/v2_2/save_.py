@@ -205,7 +205,7 @@ def hardlink_to_cache(source, dest):
     # Unlinking promises the correct layers are linked in the image directory
     if os.path.exists(dest):
       os.unlink(dest)
-    os.symlink(source, dest)
+    os.link(source, dest)
 
   def valid(cached_layer, digest):
     with io.open(cached_layer, u'rb') as f:
