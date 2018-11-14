@@ -170,12 +170,12 @@ def fast(image, directory,
   """
 
   def write_file(name, accessor,
-                 arg, sync_cache):
+                 arg):
     with io.open(name, u'wb') as f:
       f.write(accessor(arg))
 
   def write_file_and_store(name, accessor,
-                           arg, cached_layer):
+                           arg, cached_layer, sync_cache):
     write_file(cached_layer, accessor, arg)
     sync_cache(cached_layer, name)
 
@@ -183,7 +183,7 @@ def fast(image, directory,
   def copy_from_cache(source, dest):
     # if copy of the file exists and equals to the one in cache - do nothing
     if os.path.exists(dest):
-      if (!files_are_equal(source, dest)):
+      if not files_are_equal(source, dest):
           os.remove(dest)
           copy_file(source, dest)
     else:
@@ -198,6 +198,14 @@ def fast(image, directory,
       os.remove(dest)
     os.symlink(source, dest)
 
+
+def hardlink_to_cache(source, dest):
+    # unlink first to remove "old" layers if needed, e.g., image A latest has layers 1, 2 and 3
+    # after a while it has layers 1, 2 and 3'. Since in both cases the layers are named 001, 002 and 003
+    # Unlinking promises the correct layers are linked in the image directory
+    if os.path.exists(dest):
+      os.unlink(dest)
+    os.symlink(source, dest)
 
   def valid(cached_layer, digest):
     with io.open(cached_layer, u'rb') as f:
